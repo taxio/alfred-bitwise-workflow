@@ -52,7 +52,10 @@ impl Lexer {
                 }
                 ' ' | '\t' => continue,
                 '0'..='9' => {
-                    let value = self.read_value(c);
+                    let value = match self.read_value(c) {
+                        Ok(v) => v,
+                        Err(e) => return Err(e),
+                    };
                     tokens.push(Token {
                         kind: TokenKind::Value(value),
                     })
@@ -99,7 +102,7 @@ impl Lexer {
         Ok(tokens)
     }
 
-    fn read_value(&mut self, c0: char) -> String {
+    fn read_value(&mut self, c0: char) -> Result<String, BitwiseError> {
         let mut cs: Vec<char> = vec![c0];
 
         loop {
@@ -110,14 +113,18 @@ impl Lexer {
 
             // TODO; support bin, oct and hex
             if !c.is_digit(10) {
-                self.csr.unget().expect("failed to cursor.unget()");
-                break;
+                match self.csr.unget() {
+                    Ok(_) => {
+                        break;
+                    }
+                    Err(e) => return Err(e),
+                }
             }
 
             cs.push(c);
         }
 
-        cs.into_iter().collect()
+        Ok(cs.into_iter().collect())
     }
 
     fn read_shift(&mut self, c0: char) -> Result<(), BitwiseError> {
