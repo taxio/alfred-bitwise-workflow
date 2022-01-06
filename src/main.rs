@@ -8,6 +8,8 @@ pub enum BitwiseError {
     InvalidToken(String),
     #[error("Invalid cursor position: {0}")]
     CursorPosition(String),
+    #[error("Invalid query: {0}")]
+    InvalidQuery(String),
     #[error("Runtime error: {0}")]
     RuntimeError(String),
 }
@@ -108,24 +110,27 @@ fn calculate(query: &str) -> Result<u64, BitwiseError> {
             TokenKind::Value(v) => {
                 calc_stack.push(v.parse::<u64>().unwrap());
             }
-            TokenKind::Symbol(s) => {
-                let v1 = calc_stack.pop().unwrap();
-                let v2 = calc_stack.pop().unwrap();
-                let v: u64 = match s {
-                    Symbol::And => v2 & v1,
-                    Symbol::Xor => v2 ^ v1,
-                    Symbol::Or => v2 | v1,
-                    Symbol::LSHIFT => v2 << v1,
-                    Symbol::RSHIFT => v2 >> v1,
-                    _ => {
-                        return Err(BitwiseError::RuntimeError(format!(
-                            "Unsupported not yet: {:?}",
-                            s
-                        )));
-                    }
-                };
-                calc_stack.push(v);
-            }
+            TokenKind::Symbol(s) => match s {
+                Symbol::LPAREN | Symbol::RPAREN => {}
+                _ => {
+                    let v1 = calc_stack.pop().unwrap();
+                    let v2 = calc_stack.pop().unwrap();
+                    let v: u64 = match s {
+                        Symbol::And => v2 & v1,
+                        Symbol::Xor => v2 ^ v1,
+                        Symbol::Or => v2 | v1,
+                        Symbol::LSHIFT => v2 << v1,
+                        Symbol::RSHIFT => v2 >> v1,
+                        _ => {
+                            return Err(BitwiseError::RuntimeError(format!(
+                                "Unsupported not yet: {:?}",
+                                s
+                            )));
+                        }
+                    };
+                    calc_stack.push(v);
+                }
+            },
             TokenKind::EOL => {
                 break;
             }
@@ -144,7 +149,6 @@ fn calculate(query: &str) -> Result<u64, BitwiseError> {
     Ok(ans)
 }
 
-// TODO: Support PARENs
 fn reverse_polish_notation(tokens: Vec<Token>) -> Result<Vec<Token>, BitwiseError> {
     let mut rets: Vec<Token> = Vec::new();
     let mut stack: Vec<Symbol> = Vec::new();
@@ -153,21 +157,46 @@ fn reverse_polish_notation(tokens: Vec<Token>) -> Result<Vec<Token>, BitwiseErro
             TokenKind::Value(_) => {
                 rets.push(token);
             }
-            TokenKind::Symbol(s) => match stack.pop() {
-                Some(prev_symbol) => {
-                    if prev_symbol < s {
-                        rets.push(Token {
-                            kind: TokenKind::Symbol(prev_symbol),
-                        });
-                        stack.push(s);
-                    } else {
-                        stack.push(prev_symbol);
+            TokenKind::Symbol(s) => match s {
+                Symbol::LPAREN => stack.push(s),
+                Symbol::RPAREN => loop {
+                    match stack.pop() {
+                        Some(prev_symbol) => match prev_symbol {
+                            Symbol::LPAREN => {
+                                break;
+                            }
+                            _ => {
+                                rets.push(Token {
+                                    kind: TokenKind::Symbol(prev_symbol),
+                                });
+                            }
+                        },
+                        None => {
+                            return Err(BitwiseError::InvalidQuery(
+                                "incorrect pair of parentheses".to_string(),
+                            ))
+                        }
+                    }
+                },
+                _ => match stack.pop() {
+                    Some(prev_symbol) => {
+                        if prev_symbol == Symbol::LPAREN || prev_symbol == Symbol::RPAREN {
+                            stack.push(prev_symbol);
+                            stack.push(s);
+                        } else if prev_symbol < s {
+                            rets.push(Token {
+                                kind: TokenKind::Symbol(prev_symbol),
+                            });
+                            stack.push(s);
+                        } else {
+                            stack.push(prev_symbol);
+                            stack.push(s);
+                        }
+                    }
+                    None => {
                         stack.push(s);
                     }
-                }
-                None => {
-                    stack.push(s);
-                }
+                },
             },
             TokenKind::EOL => {
                 break;
@@ -376,8 +405,12 @@ mod tests {
                 ans: 72,
             },
             TestCaseForCalculate {
-                src: "123 & 456".to_string(),
-                ans: 72,
+                src: "123 & 456 >> 2".to_string(),
+                ans: 114,
+            },
+            TestCaseForCalculate {
+                src: "(123 & 456) >> 2".to_string(),
+                ans: 18,
             },
         ];
 
