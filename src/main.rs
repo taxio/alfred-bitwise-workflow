@@ -1,3 +1,4 @@
+use serde::{Deserialize, Serialize};
 use std::env;
 use thiserror::Error;
 
@@ -15,36 +16,90 @@ fn main() {
     let args: Vec<String> = env::args().collect();
     let query = &args[1];
 
+    if query.is_empty() {
+        return;
+    }
+
     let ans = match calculate(query) {
         Ok(v) => v,
         Err(e) => {
-            println!("Error: {}", e);
+            eprintln!("Error: {}", e);
             return;
         }
     };
 
-    println!("Answer: {}", ans);
+    match build_json_for_alfred(ans) {
+        Ok(json) => println!("{}", json),
+        Err(e) => {
+            eprintln!("Error: {}", e);
+        }
+    }
+}
 
-    // TODO: Build for Alfred
+#[derive(Serialize, Deserialize, Debug)]
+struct AlfredScriptFilterIcon {
+    path: String,
+}
+
+// See: https://www.alfredapp.com/help/workflows/inputs/script-filter/json/
+#[derive(Serialize, Deserialize, Debug)]
+struct AlfredScriptFilterItem {
+    title: String,
+    subtitle: String,
+    arg: String,
+    icon: AlfredScriptFilterIcon,
+}
+
+#[derive(Serialize, Deserialize, Debug)]
+struct AlfredScriptFilter {
+    items: Vec<AlfredScriptFilterItem>,
+}
+
+fn build_json_for_alfred(ans: u64) -> Result<String, BitwiseError> {
+    let items: Vec<AlfredScriptFilterItem> = vec![
+        AlfredScriptFilterItem {
+            title: format!("{:x}", ans),
+            subtitle: "Hexadecimal".to_string(),
+            arg: format!("{:x}", ans),
+            icon: AlfredScriptFilterIcon {
+                path: "".to_string(),
+            },
+        },
+        AlfredScriptFilterItem {
+            title: format!("{}", ans),
+            subtitle: "Decimal".to_string(),
+            arg: format!("{}", ans),
+            icon: AlfredScriptFilterIcon {
+                path: "".to_string(),
+            },
+        },
+        AlfredScriptFilterItem {
+            title: format!("{:o}", ans),
+            subtitle: "Octal".to_string(),
+            arg: format!("{:o}", ans),
+            icon: AlfredScriptFilterIcon {
+                path: "".to_string(),
+            },
+        },
+        AlfredScriptFilterItem {
+            title: format!("{:b}", ans),
+            subtitle: "Binary".to_string(),
+            arg: format!("{:b}", ans),
+            icon: AlfredScriptFilterIcon {
+                path: "".to_string(),
+            },
+        },
+    ];
+
+    let serialized = serde_json::to_string(&AlfredScriptFilter { items }).unwrap();
+
+    Ok(serialized)
 }
 
 fn calculate(query: &str) -> Result<u64, BitwiseError> {
-    println!("query: {}", query);
-
     let mut lex = Lexer::new(query);
     let tokens = lex.tokenize().unwrap();
-    for t in tokens.iter() {
-        println!("{:?}", t);
-    }
-
-    println!("-------------------------------");
-
     let tokens = reverse_polish_notation(tokens).unwrap();
-    for t in tokens.iter() {
-        println!("{:?}", t);
-    }
-
-    println!("-------------------------------");
 
     // 計算する (オーバーフローの検出もする)
     let mut calc_stack: Vec<u64> = Vec::new();
@@ -56,7 +111,6 @@ fn calculate(query: &str) -> Result<u64, BitwiseError> {
             TokenKind::Symbol(s) => {
                 let v1 = calc_stack.pop().unwrap();
                 let v2 = calc_stack.pop().unwrap();
-                println!("{} {:?} {}", v2, s, v1);
                 let v: u64 = match s {
                     Symbol::And => v2 & v1,
                     Symbol::Xor => v2 ^ v1,
@@ -90,7 +144,7 @@ fn calculate(query: &str) -> Result<u64, BitwiseError> {
     Ok(ans)
 }
 
-// TOOD: Support PARENs
+// TODO: Support PARENs
 fn reverse_polish_notation(tokens: Vec<Token>) -> Result<Vec<Token>, BitwiseError> {
     let mut rets: Vec<Token> = Vec::new();
     let mut stack: Vec<Symbol> = Vec::new();
