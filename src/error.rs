@@ -6,4 +6,6 @@ pub enum BitwiseError {
     InvalidToken(String),
     #[error("Invalid cursor position: {0}")]
     CursorPosition(String),
+    #[error("Runtime error: {0}")]
+    RuntimeError(String),
 }

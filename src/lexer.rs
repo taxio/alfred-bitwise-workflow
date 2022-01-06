@@ -7,18 +7,16 @@ pub enum TokenKind {
     Value(String),
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, PartialOrd)]
 pub enum Symbol {
-    And, // &
-    Or,  // |
-    Xor, // ^
-    Not, // ~
-
     LPAREN, // (
     RPAREN, // )
 
     LSHIFT, // <<
     RSHIFT, // >>
+    And,    // &
+    Xor,    // ^
+    Or,     // |
 }
 
 #[derive(Debug, PartialEq)]
@@ -68,9 +66,6 @@ impl Lexer {
                 }),
                 '^' => tokens.push(Token {
                     kind: TokenKind::Symbol(Symbol::Xor),
-                }),
-                '~' => tokens.push(Token {
-                    kind: TokenKind::Symbol(Symbol::Not),
                 }),
                 '(' => tokens.push(Token {
                     kind: TokenKind::Symbol(Symbol::LPAREN),
