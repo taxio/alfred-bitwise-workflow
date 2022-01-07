@@ -1,14 +1,15 @@
 # Alfred Bitwise Workflow
+This is the Alfred Workflow for bitwise operations.
 
-### Operation Priority
+![demo](./images/demo.gif)
+
+The priority of each operation is as follows:
 
 1. SHIFT
 1. AND
 1. XOR
 1. OR
 
+This is in accordance with the C++ specification.
 
-### TODO
-- [ ] Refactor
-- [ ] README
-- [ ] Release (`.alfredworkflow`)
+https://en.cppreference.com/w/c/language/operator_precedence
