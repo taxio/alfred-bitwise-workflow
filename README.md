@@ -9,10 +9,6 @@
 
 
 ### TODO
-- [x] fix Oct format (`0o` or `0`)
-- [ ] Checking overflow
-- [x] Error Message
-- [ ] Icon
-- [ ] README
 - [ ] Refactor
+- [ ] README
 - [ ] Release (`.alfredworkflow`)
