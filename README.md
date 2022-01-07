@@ -1,5 +1,5 @@
 # Alfred Bitwise Workflow
-This is the Alfred Workflow for bitwise operations.
+This is an Alfred Workflow for bitwise operations.
 
 ![demo](./images/demo.gif)
 
