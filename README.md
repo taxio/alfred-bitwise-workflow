@@ -3,7 +3,7 @@ This is an Alfred Workflow for bitwise operations.
 
 ![demo](./images/demo.gif)
 
-The priority of each operation is as follows:
+The order of precedence for each operation is as follows:
 
 1. SHIFT
 1. AND
