@@ -123,9 +123,7 @@ fn calculate(query: &str) -> Result<u64, BitwiseError> {
     let mut calc_stack: Vec<u64> = Vec::new();
     for t in tokens {
         match t.kind {
-            TokenKind::Value(v) => {
-                calc_stack.push(v.u64()?);
-            }
+            TokenKind::Value(v) => calc_stack.push(v.u64()?),
             TokenKind::Symbol(s) => match s {
                 Symbol::LPAREN | Symbol::RPAREN => {}
                 _ => {
@@ -166,22 +164,16 @@ fn reverse_polish_notation(tokens: Vec<Token>) -> Result<Vec<Token>, BitwiseErro
     let mut stack: Vec<Symbol> = Vec::new();
     for token in tokens {
         match token.kind {
-            TokenKind::Value(_) => {
-                rets.push(token);
-            }
+            TokenKind::Value(_) => rets.push(token),
             TokenKind::Symbol(s) => match s {
                 Symbol::LPAREN => stack.push(s),
                 Symbol::RPAREN => loop {
                     match stack.pop() {
                         Some(prev_symbol) => match prev_symbol {
-                            Symbol::LPAREN => {
-                                break;
-                            }
-                            _ => {
-                                rets.push(Token {
-                                    kind: TokenKind::Symbol(prev_symbol),
-                                });
-                            }
+                            Symbol::LPAREN => break,
+                            _ => rets.push(Token {
+                                kind: TokenKind::Symbol(prev_symbol),
+                            }),
                         },
                         None => {
                             return Err(BitwiseError::InvalidQuery(
@@ -205,14 +197,10 @@ fn reverse_polish_notation(tokens: Vec<Token>) -> Result<Vec<Token>, BitwiseErro
                             stack.push(s);
                         }
                     }
-                    None => {
-                        stack.push(s);
-                    }
+                    None => stack.push(s),
                 },
             },
-            TokenKind::EOL => {
-                break;
-            }
+            TokenKind::EOL => break,
         }
     }
 
@@ -300,14 +288,13 @@ impl Value {
             Value::Bin(_) => 2,
         };
 
-        match self {
+        let v = match self {
             Value::Hex(s) | Value::Dec(s) | Value::Oct(s) | Value::Bin(s) => {
-                match u64::from_str_radix(s, radix) {
-                    Ok(v) => Ok(v),
-                    Err(e) => Err(BitwiseError::ParseIntError(e)),
-                }
+                u64::from_str_radix(s, radix)?
             }
-        }
+        };
+
+        Ok(v)
     }
 }
 
@@ -341,24 +328,12 @@ impl Lexer {
                     });
                 }
                 ' ' | '\t' => continue,
-                '0' => {
-                    let value = match self.read_prefixed_value() {
-                        Ok(v) => v,
-                        Err(e) => return Err(e),
-                    };
-                    tokens.push(Token {
-                        kind: TokenKind::Value(value),
-                    })
-                }
-                '1'..='9' => {
-                    let value = match self.read_dec(c) {
-                        Ok(v) => v,
-                        Err(e) => return Err(e),
-                    };
-                    tokens.push(Token {
-                        kind: TokenKind::Value(value),
-                    })
-                }
+                '0' => tokens.push(Token {
+                    kind: TokenKind::Value(self.read_prefixed_value()?),
+                }),
+                '1'..='9' => tokens.push(Token {
+                    kind: TokenKind::Value(self.read_dec(c)?),
+                }),
                 '&' => tokens.push(Token {
                     kind: TokenKind::Symbol(Symbol::And),
                 }),
@@ -374,18 +349,18 @@ impl Lexer {
                 ')' => tokens.push(Token {
                     kind: TokenKind::Symbol(Symbol::RPAREN),
                 }),
-                '<' => match self.read_shift(c) {
-                    Ok(_) => tokens.push(Token {
+                '<' => {
+                    self.read_shift(c)?;
+                    tokens.push(Token {
                         kind: TokenKind::Symbol(Symbol::LSHIFT),
-                    }),
-                    Err(e) => return Err(e),
-                },
-                '>' => match self.read_shift(c) {
-                    Ok(_) => tokens.push(Token {
+                    });
+                }
+                '>' => {
+                    self.read_shift(c)?;
+                    tokens.push(Token {
                         kind: TokenKind::Symbol(Symbol::RSHIFT),
-                    }),
-                    Err(e) => return Err(e),
-                },
+                    });
+                }
                 _ => {
                     return Err(BitwiseError::InvalidQuery(format!(
                         "unexpected character: {}",
@@ -431,7 +406,6 @@ impl Lexer {
             match prefix {
                 'x' => is_break = !c.is_digit(16),
                 'd' => is_break = !c.is_digit(10),
-                'o' => is_break = !c.is_digit(8),
                 'b' => is_break = !c.is_digit(2),
                 _ => {
                     return Err(BitwiseError::InvalidQuery(format!(
@@ -441,12 +415,8 @@ impl Lexer {
                 }
             }
             if is_break {
-                match self.csr.unget() {
-                    Ok(_) => {
-                        break;
-                    }
-                    Err(e) => return Err(e),
-                }
+                self.csr.unget()?;
+                break;
             }
 
             cs.push(c);
@@ -459,7 +429,6 @@ impl Lexer {
         match prefix {
             'x' => Ok(Value::Hex(cs.into_iter().collect())),
             'd' => Ok(Value::Dec(cs.into_iter().collect())),
-            'o' => Ok(Value::Oct(cs.into_iter().collect())),
             'b' => Ok(Value::Bin(cs.into_iter().collect())),
             _ => {
                 return Err(BitwiseError::InvalidQuery(format!(
