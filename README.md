@@ -9,7 +9,9 @@
 
 
 ### TODO
-- [x] Support Hex, Oct and Bin input
+- [ ] fix Oct format (`0o` or `0`)
+- [ ] Checking overflow
+- [ ] Error Message
 - [ ] Icon
 - [ ] README
 - [ ] Refactor
