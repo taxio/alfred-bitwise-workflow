@@ -9,7 +9,7 @@
 
 
 ### TODO
-- [ ] fix Oct format (`0o` or `0`)
+- [x] fix Oct format (`0o` or `0`)
 - [ ] Checking overflow
 - [x] Error Message
 - [ ] Icon

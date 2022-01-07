@@ -400,32 +400,18 @@ impl Lexer {
     }
 
     fn read_dec(&mut self, c0: char) -> Result<Value, BitwiseError> {
-        let mut cs: Vec<char> = vec![c0];
-
-        loop {
-            let c = self.csr.get();
-            if c == EOL_CHAR {
-                break;
-            }
-
-            if !c.is_digit(10) {
-                match self.csr.unget() {
-                    Ok(_) => {
-                        break;
-                    }
-                    Err(e) => return Err(e),
-                }
-            }
-
-            cs.push(c);
-        }
-
-        Ok(Value::Dec(cs.into_iter().collect()))
+        Ok(Value::Dec(self.read_value(c0, 10)?))
     }
 
     fn read_prefixed_value(&mut self) -> Result<Value, BitwiseError> {
         let prefix = self.csr.get();
-        if prefix != 'x' && prefix != 'd' && prefix != 'o' && prefix != 'b' {
+
+        // Oct
+        if prefix.is_digit(8) {
+            return Ok(Value::Oct(self.read_value(prefix, 8)?));
+        }
+
+        if prefix != 'x' && prefix != 'd' && prefix != 'b' {
             return Err(BitwiseError::InvalidToken(format!(
                 "\"0{}\" is not supported",
                 prefix
@@ -482,6 +468,26 @@ impl Lexer {
         }
     }
 
+    fn read_value(&mut self, c0: char, radix: u32) -> Result<String, BitwiseError> {
+        let mut cs: Vec<char> = vec![c0];
+
+        loop {
+            let c = self.csr.get();
+
+            if c == EOL_CHAR {
+                break;
+            }
+            if !c.is_digit(radix) {
+                self.csr.unget()?;
+                break;
+            }
+
+            cs.push(c);
+        }
+
+        Ok(cs.into_iter().collect())
+    }
+
     fn read_shift(&mut self, c0: char) -> Result<(), BitwiseError> {
         let c1 = self.csr.get();
 
@@ -519,7 +525,7 @@ mod tests {
                 ans: 18,
             },
             TestCaseForCalculate {
-                src: "(0xab & 123) >> 2 | 0b11001010 & 0o456 ^ 0d789".to_string(),
+                src: "(0xab & 123) >> 2 | 0b11001010 & 0456 ^ 0d789".to_string(),
                 ans: 799,
             },
         ];
@@ -558,6 +564,17 @@ mod tests {
                 tokens: vec![
                     Token {
                         kind: TokenKind::Value(Value::Hex("1ac".to_string())),
+                    },
+                    Token {
+                        kind: TokenKind::EOL,
+                    },
+                ],
+            },
+            TestCaseForTokenize {
+                src: "0456".to_string(),
+                tokens: vec![
+                    Token {
+                        kind: TokenKind::Value(Value::Oct("456".to_string())),
                     },
                     Token {
                         kind: TokenKind::EOL,
