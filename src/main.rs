@@ -6,8 +6,6 @@ use thiserror::Error;
 
 #[derive(Debug, Error)]
 pub enum BitwiseError {
-    #[error("Invalid token: {0}")]
-    InvalidToken(String),
     #[error("Invalid query: {0}")]
     InvalidQuery(String),
     #[error("{0}")]
@@ -141,7 +139,7 @@ fn calculate(query: &str) -> Result<u64, BitwiseError> {
                         Symbol::LSHIFT => v2 << v1,
                         Symbol::RSHIFT => v2 >> v1,
                         _ => {
-                            return Err(BitwiseError::InvalidToken(format!(
+                            return Err(BitwiseError::InvalidQuery(format!(
                                 "unsupported symbol: {:?}",
                                 s
                             )));
@@ -389,7 +387,10 @@ impl Lexer {
                     Err(e) => return Err(e),
                 },
                 _ => {
-                    return Err(BitwiseError::InvalidToken(c.to_string()));
+                    return Err(BitwiseError::InvalidQuery(format!(
+                        "unexpected character: {}",
+                        c
+                    )));
                 }
             }
 
@@ -413,7 +414,7 @@ impl Lexer {
         }
 
         if prefix != 'x' && prefix != 'd' && prefix != 'b' {
-            return Err(BitwiseError::InvalidToken(format!(
+            return Err(BitwiseError::InvalidQuery(format!(
                 "\"0{}\" is not supported",
                 prefix
             )));
@@ -433,7 +434,7 @@ impl Lexer {
                 'o' => is_break = !c.is_digit(8),
                 'b' => is_break = !c.is_digit(2),
                 _ => {
-                    return Err(BitwiseError::InvalidToken(format!(
+                    return Err(BitwiseError::InvalidQuery(format!(
                         "\"0{}\" is not supported",
                         prefix
                     )))
@@ -452,7 +453,7 @@ impl Lexer {
         }
 
         if cs.is_empty() {
-            return Err(BitwiseError::InvalidToken("empty value".to_string()));
+            return Err(BitwiseError::InvalidQuery("empty value".to_string()));
         }
 
         match prefix {
@@ -461,7 +462,7 @@ impl Lexer {
             'o' => Ok(Value::Oct(cs.into_iter().collect())),
             'b' => Ok(Value::Bin(cs.into_iter().collect())),
             _ => {
-                return Err(BitwiseError::InvalidToken(format!(
+                return Err(BitwiseError::InvalidQuery(format!(
                     "\"0{}\" is not supported",
                     prefix
                 )))
@@ -493,7 +494,10 @@ impl Lexer {
         let c1 = self.csr.get();
 
         if c0 != c1 {
-            return Err(BitwiseError::InvalidToken(format!("{}{}", c0, c1)));
+            return Err(BitwiseError::InvalidQuery(format!(
+                "unexpected token: {}{}",
+                c0, c1
+            )));
         }
 
         Ok(())
