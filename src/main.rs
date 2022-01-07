@@ -1,44 +1,41 @@
 use serde::{Deserialize, Serialize};
 use std::env;
 use std::num::ParseIntError;
+use std::process;
 use thiserror::Error;
 
 #[derive(Debug, Error)]
 pub enum BitwiseError {
     #[error("Invalid token: {0}")]
     InvalidToken(String),
-    #[error("Invalid cursor position: {0}")]
-    CursorPosition(String),
     #[error("Invalid query: {0}")]
     InvalidQuery(String),
-    #[error("Runtime error: {0}")]
-    RuntimeError(String),
     #[error("{0}")]
     ParseIntError(#[from] ParseIntError),
+    #[error("{0}")]
+    JsonSerializeError(#[from] serde_json::Error),
 }
 
 fn main() {
+    match run() {
+        Ok(_) => process::exit(0),
+        Err(e) => fatal(format!("{}", e)),
+    }
+}
+
+fn run() -> Result<(), BitwiseError> {
     let args: Vec<String> = env::args().collect();
     let query = &args[1];
 
     if query.is_empty() {
-        return;
+        return Ok(());
     }
 
-    let ans = match calculate(query) {
-        Ok(v) => v,
-        Err(e) => {
-            eprintln!("Error: {}", e);
-            return;
-        }
-    };
+    let ans = calculate(query)?;
 
-    match build_json_for_alfred(ans) {
-        Ok(json) => println!("{}", json),
-        Err(e) => {
-            eprintln!("Error: {}", e);
-        }
-    }
+    println!("{}", build_json_for_alfred(ans)?);
+
+    Ok(())
 }
 
 #[derive(Serialize, Deserialize, Debug)]
@@ -96,21 +93,39 @@ fn build_json_for_alfred(ans: u64) -> Result<String, BitwiseError> {
         },
     ];
 
-    let serialized = serde_json::to_string(&AlfredScriptFilter { items }).unwrap();
+    let serialized = serde_json::to_string(&AlfredScriptFilter { items })?;
 
     Ok(serialized)
 }
 
+fn fatal(msg: String) {
+    eprintln!("Error: {}", msg);
+
+    let json: AlfredScriptFilter = AlfredScriptFilter {
+        items: vec![AlfredScriptFilterItem {
+            title: msg.clone(),
+            subtitle: "Error".to_string(),
+            arg: msg,
+            icon: AlfredScriptFilterIcon {
+                path: "".to_string(),
+            },
+        }],
+    };
+    println!("{}", serde_json::to_string(&json).unwrap());
+
+    process::exit(1);
+}
+
 fn calculate(query: &str) -> Result<u64, BitwiseError> {
     let mut lex = Lexer::new(query);
-    let tokens = lex.tokenize().unwrap();
-    let tokens = reverse_polish_notation(tokens).unwrap();
+    let tokens = lex.tokenize()?;
+    let tokens = reverse_polish_notation(tokens)?;
 
     let mut calc_stack: Vec<u64> = Vec::new();
     for t in tokens {
         match t.kind {
             TokenKind::Value(v) => {
-                calc_stack.push(v.u64().unwrap());
+                calc_stack.push(v.u64()?);
             }
             TokenKind::Symbol(s) => match s {
                 Symbol::LPAREN | Symbol::RPAREN => {}
@@ -125,8 +140,8 @@ fn calculate(query: &str) -> Result<u64, BitwiseError> {
                         Symbol::LSHIFT => v2 << v1,
                         Symbol::RSHIFT => v2 >> v1,
                         _ => {
-                            return Err(BitwiseError::RuntimeError(format!(
-                                "Unsupported not yet: {:?}",
+                            return Err(BitwiseError::InvalidToken(format!(
+                                "unsupported symbol: {:?}",
                                 s
                             )));
                         }
@@ -141,15 +156,10 @@ fn calculate(query: &str) -> Result<u64, BitwiseError> {
     }
 
     if calc_stack.len() != 1 {
-        return Err(BitwiseError::RuntimeError(format!(
-            "calc_stack size is not 1, got {}",
-            calc_stack.len()
-        )));
+        panic!("calc_stack size is not 1, got {}", calc_stack.len());
     }
 
-    let ans = calc_stack.pop().unwrap();
-
-    Ok(ans)
+    Ok(calc_stack.pop().unwrap())
 }
 
 fn reverse_polish_notation(tokens: Vec<Token>) -> Result<Vec<Token>, BitwiseError> {
@@ -242,9 +252,7 @@ impl Cursor {
 
     pub fn unget(&mut self) -> Result<(), BitwiseError> {
         if self.idx == 0 {
-            return Err(BitwiseError::CursorPosition(
-                "cursor cannot go back ahead of the leader".to_string(),
-            ));
+            panic!("cursor cannot go back ahead of the leader");
         }
 
         self.idx -= 1;

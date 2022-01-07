@@ -11,7 +11,7 @@
 ### TODO
 - [ ] fix Oct format (`0o` or `0`)
 - [ ] Checking overflow
-- [ ] Error Message
+- [x] Error Message
 - [ ] Icon
 - [ ] README
 - [ ] Refactor
