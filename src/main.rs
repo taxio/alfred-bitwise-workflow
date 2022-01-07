@@ -19,7 +19,10 @@ pub enum BitwiseError {
 fn main() {
     match run() {
         Ok(_) => process::exit(0),
-        Err(e) => fatal(format!("{}", e)),
+        Err(e) => {
+            output_error(format!("{}", e));
+            process::exit(1);
+        }
     }
 }
 
@@ -98,7 +101,7 @@ fn build_json_for_alfred(ans: u64) -> Result<String, BitwiseError> {
     Ok(serialized)
 }
 
-fn fatal(msg: String) {
+fn output_error(msg: String) {
     eprintln!("Error: {}", msg);
 
     let json: AlfredScriptFilter = AlfredScriptFilter {
@@ -112,8 +115,6 @@ fn fatal(msg: String) {
         }],
     };
     println!("{}", serde_json::to_string(&json).unwrap());
-
-    process::exit(1);
 }
 
 fn calculate(query: &str) -> Result<u64, BitwiseError> {
