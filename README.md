@@ -9,7 +9,7 @@
 
 
 ### TODO
-- [ ] Support Hex, Oct and Bin input
+- [x] Support Hex, Oct and Bin input
 - [ ] Icon
 - [ ] README
 - [ ] Refactor

@@ -1,5 +1,6 @@
 use serde::{Deserialize, Serialize};
 use std::env;
+use std::num::ParseIntError;
 use thiserror::Error;
 
 #[derive(Debug, Error)]
@@ -12,6 +13,8 @@ pub enum BitwiseError {
     InvalidQuery(String),
     #[error("Runtime error: {0}")]
     RuntimeError(String),
+    #[error("{0}")]
+    ParseIntError(#[from] ParseIntError),
 }
 
 fn main() {
@@ -103,12 +106,11 @@ fn calculate(query: &str) -> Result<u64, BitwiseError> {
     let tokens = lex.tokenize().unwrap();
     let tokens = reverse_polish_notation(tokens).unwrap();
 
-    // 計算する (オーバーフローの検出もする)
     let mut calc_stack: Vec<u64> = Vec::new();
     for t in tokens {
         match t.kind {
             TokenKind::Value(v) => {
-                calc_stack.push(v.parse::<u64>().unwrap());
+                calc_stack.push(v.u64().unwrap());
             }
             TokenKind::Symbol(s) => match s {
                 Symbol::LPAREN | Symbol::RPAREN => {}
@@ -119,6 +121,7 @@ fn calculate(query: &str) -> Result<u64, BitwiseError> {
                         Symbol::And => v2 & v1,
                         Symbol::Xor => v2 ^ v1,
                         Symbol::Or => v2 | v1,
+                        // TODO: Check overflow
                         Symbol::LSHIFT => v2 << v1,
                         Symbol::RSHIFT => v2 >> v1,
                         _ => {
@@ -258,7 +261,7 @@ impl Cursor {
 pub enum TokenKind {
     EOL,
     Symbol(Symbol),
-    Value(String),
+    Value(Value),
 }
 
 #[derive(Debug, PartialEq, PartialOrd)]
@@ -271,6 +274,34 @@ pub enum Symbol {
     And,    // &
     Xor,    // ^
     Or,     // |
+}
+
+#[derive(Debug, PartialEq)]
+pub enum Value {
+    Hex(String),
+    Dec(String),
+    Oct(String),
+    Bin(String),
+}
+
+impl Value {
+    pub fn u64(&self) -> Result<u64, BitwiseError> {
+        let radix = match self {
+            Value::Hex(_) => 16,
+            Value::Dec(_) => 10,
+            Value::Oct(_) => 8,
+            Value::Bin(_) => 2,
+        };
+
+        match self {
+            Value::Hex(s) | Value::Dec(s) | Value::Oct(s) | Value::Bin(s) => {
+                match u64::from_str_radix(s, radix) {
+                    Ok(v) => Ok(v),
+                    Err(e) => Err(BitwiseError::ParseIntError(e)),
+                }
+            }
+        }
+    }
 }
 
 #[derive(Debug, PartialEq)]
@@ -303,8 +334,17 @@ impl Lexer {
                     });
                 }
                 ' ' | '\t' => continue,
-                '0'..='9' => {
-                    let value = match self.read_value(c) {
+                '0' => {
+                    let value = match self.read_prefixed_value() {
+                        Ok(v) => v,
+                        Err(e) => return Err(e),
+                    };
+                    tokens.push(Token {
+                        kind: TokenKind::Value(value),
+                    })
+                }
+                '1'..='9' => {
+                    let value = match self.read_dec(c) {
                         Ok(v) => v,
                         Err(e) => return Err(e),
                     };
@@ -351,7 +391,7 @@ impl Lexer {
         Ok(tokens)
     }
 
-    fn read_value(&mut self, c0: char) -> Result<String, BitwiseError> {
+    fn read_dec(&mut self, c0: char) -> Result<Value, BitwiseError> {
         let mut cs: Vec<char> = vec![c0];
 
         loop {
@@ -360,7 +400,6 @@ impl Lexer {
                 break;
             }
 
-            // TODO; support bin, oct and hex
             if !c.is_digit(10) {
                 match self.csr.unget() {
                     Ok(_) => {
@@ -373,7 +412,66 @@ impl Lexer {
             cs.push(c);
         }
 
-        Ok(cs.into_iter().collect())
+        Ok(Value::Dec(cs.into_iter().collect()))
+    }
+
+    fn read_prefixed_value(&mut self) -> Result<Value, BitwiseError> {
+        let prefix = self.csr.get();
+        if prefix != 'x' && prefix != 'd' && prefix != 'o' && prefix != 'b' {
+            return Err(BitwiseError::InvalidToken(format!(
+                "\"0{}\" is not supported",
+                prefix
+            )));
+        }
+
+        let mut cs: Vec<char> = Vec::new();
+        loop {
+            let c = self.csr.get();
+            if c == EOL_CHAR {
+                break;
+            }
+
+            let is_break;
+            match prefix {
+                'x' => is_break = !c.is_digit(16),
+                'd' => is_break = !c.is_digit(10),
+                'o' => is_break = !c.is_digit(8),
+                'b' => is_break = !c.is_digit(2),
+                _ => {
+                    return Err(BitwiseError::InvalidToken(format!(
+                        "\"0{}\" is not supported",
+                        prefix
+                    )))
+                }
+            }
+            if is_break {
+                match self.csr.unget() {
+                    Ok(_) => {
+                        break;
+                    }
+                    Err(e) => return Err(e),
+                }
+            }
+
+            cs.push(c);
+        }
+
+        if cs.is_empty() {
+            return Err(BitwiseError::InvalidToken("empty value".to_string()));
+        }
+
+        match prefix {
+            'x' => Ok(Value::Hex(cs.into_iter().collect())),
+            'd' => Ok(Value::Dec(cs.into_iter().collect())),
+            'o' => Ok(Value::Oct(cs.into_iter().collect())),
+            'b' => Ok(Value::Bin(cs.into_iter().collect())),
+            _ => {
+                return Err(BitwiseError::InvalidToken(format!(
+                    "\"0{}\" is not supported",
+                    prefix
+                )))
+            }
+        }
     }
 
     fn read_shift(&mut self, c0: char) -> Result<(), BitwiseError> {
@@ -412,6 +510,10 @@ mod tests {
                 src: "(123 & 456) >> 2".to_string(),
                 ans: 18,
             },
+            TestCaseForCalculate {
+                src: "(0xab & 123) >> 2 | 0b11001010 & 0o456 ^ 0d789".to_string(),
+                ans: 799,
+            },
         ];
 
         for t in tests {
@@ -436,7 +538,18 @@ mod tests {
                 src: "123".to_string(),
                 tokens: vec![
                     Token {
-                        kind: TokenKind::Value("123".to_string()),
+                        kind: TokenKind::Value(Value::Dec("123".to_string())),
+                    },
+                    Token {
+                        kind: TokenKind::EOL,
+                    },
+                ],
+            },
+            TestCaseForTokenize {
+                src: "0x1ac".to_string(),
+                tokens: vec![
+                    Token {
+                        kind: TokenKind::Value(Value::Hex("1ac".to_string())),
                     },
                     Token {
                         kind: TokenKind::EOL,
@@ -450,13 +563,13 @@ mod tests {
                         kind: TokenKind::Symbol(Symbol::LPAREN),
                     },
                     Token {
-                        kind: TokenKind::Value("123".to_string()),
+                        kind: TokenKind::Value(Value::Dec("123".to_string())),
                     },
                     Token {
                         kind: TokenKind::Symbol(Symbol::And),
                     },
                     Token {
-                        kind: TokenKind::Value("456".to_string()),
+                        kind: TokenKind::Value(Value::Dec("456".to_string())),
                     },
                     Token {
                         kind: TokenKind::Symbol(Symbol::RPAREN),
@@ -465,7 +578,7 @@ mod tests {
                         kind: TokenKind::Symbol(Symbol::RSHIFT),
                     },
                     Token {
-                        kind: TokenKind::Value("2".to_string()),
+                        kind: TokenKind::Value(Value::Dec("2".to_string())),
                     },
                     Token {
                         kind: TokenKind::EOL,
@@ -477,6 +590,24 @@ mod tests {
         for t in tests {
             let mut lex = Lexer::new(&t.src);
             assert_eq!(lex.tokenize().unwrap(), t.tokens, "Failed in the {:?}", t);
+        }
+    }
+
+    #[derive(Debug)]
+    struct TestCaseForValueU64 {
+        value: Value,
+        expected: u64,
+    }
+
+    #[test]
+    fn test_value_u64() {
+        let tests = [TestCaseForValueU64 {
+            value: Value::Hex("ab".to_string()),
+            expected: 171,
+        }];
+
+        for t in tests {
+            assert_eq!(t.value.u64().unwrap(), t.expected);
         }
     }
 }
